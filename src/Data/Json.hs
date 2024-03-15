@@ -15,17 +15,17 @@ jsonBool =
     <|> (stringP "false" *> pure (JsonBool False))
 
 jsonNumber :: Parser JsonValue
-jsonNumber = JsonNumber . read <$> notNull (spanP isDigit)
+jsonNumber = JsonNumber . read <$> some (satisfyP (isDigit))
 
 -- NOTE: does not support escaping
 stringLiteral :: Parser String
-stringLiteral = charP '"' *> spanP (/= '"') <* charP '"'
+stringLiteral = charP '"' *> many (satisfyP (/= '"')) <* charP '"'
 
 jsonString :: Parser JsonValue
 jsonString = JsonString <$> stringLiteral
 
 ws :: Parser String
-ws = spanP isSpace
+ws = many (satisfyP isSpace)
 
 sepBy :: Parser a -> Parser b -> Parser [a]
 sepBy ele sep = (:) <$> ele <*> many (sep *> ele) <|> pure []
@@ -51,17 +51,12 @@ jsonValue =
   jsonNull <|> jsonBool <|> jsonNumber <|> jsonString <|> jsonArray <|> jsonObject
 
 charP :: Char -> Parser Char
-charP c = Parser $ \case
-  y : ys | y == c -> Just (ys, y)
+charP c = satisfyP (== c)
+
+satisfyP :: (Char -> Bool) -> Parser Char
+satisfyP f = Parser $ \case
+  y : ys | f y -> Just (ys, y)
   _ -> Nothing
 
 stringP :: String -> Parser String
 stringP xs = sequenceA (fmap charP xs)
-
-spanP :: (Char -> Bool) -> Parser String
-spanP f = Parser $ \input -> let (prefix, rest) = span f input in Just (rest, prefix)
-
-notNull :: Parser [a] -> Parser [a]
-notNull (Parser p) = Parser $ \input -> do
-  (input', x) <- p input
-  if null x then Nothing else Just (input', x)
